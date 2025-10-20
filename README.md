@@ -1,4 +1,4 @@
-# bases_lab
+# dental_lab
 
 A new Flutter project.
 
