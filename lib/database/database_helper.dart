@@ -18,19 +18,33 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('DROP TABLE IF EXISTS dental_bases');
+      await _createDB(db, newVersion);
+    }
   }
 
   Future _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE dental_bases(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        oa INTEGER PRIMARY KEY,
+        doctorName TEXT NOT NULL,
         patientName TEXT NOT NULL,
-        baseType TEXT NOT NULL,
-        creationDate TEXT NOT NULL,
-        deliveryDate TEXT,
-        status TEXT NOT NULL,
-        notes TEXT
+        patientRUT TEXT NOT NULL,
+        action TEXT NOT NULL,
+        observations TEXT NOT NULL,
+        entryDate TEXT NOT NULL,
+        exitDate TEXT NOT NULL,
+        price INTEGER NOT NULL
       )
     ''');
   }
@@ -50,12 +64,12 @@ class DatabaseHelper {
     return result.map((map) => DentalBase.fromMap(map)).toList();
   }
 
-  Future<DentalBase?> getDentalBase(int id) async {
+  Future<DentalBase?> getDentalBase(int oa) async {
     final db = await instance.database;
     final maps = await db.query(
       'dental_bases',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: 'oa = ?',
+      whereArgs: [oa],
     );
 
     if (maps.isNotEmpty) {
@@ -70,19 +84,15 @@ class DatabaseHelper {
     return await db.update(
       'dental_bases',
       dentalBase.toMap(),
-      where: 'id = ?',
-      whereArgs: [dentalBase.id],
+      where: 'oa = ?',
+      whereArgs: [dentalBase.oa],
     );
   }
 
   // Delete
-  Future<int> deleteDentalBase(int id) async {
+  Future<int> deleteDentalBase(int oa) async {
     final db = await instance.database;
-    return await db.delete(
-      'dental_bases',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('dental_bases', where: 'oa = ?', whereArgs: [oa]);
   }
 
   // Close database

@@ -11,23 +11,44 @@ class DentalBaseDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalle de Base Dental'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DentalBaseForm(dentalBase: dentalBase),
-                ),
-              ).then((_) => Navigator.pop(context));
-            },
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.teal.shade700, Colors.teal.shade400],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
           ),
-        ],
+          child: AppBar(
+            title: const Text(
+              'Detalle de Base Dental',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          DentalBaseForm(dentalBase: dentalBase),
+                    ),
+                  ).then((_) => Navigator.pop(context));
+                },
+              ),
+            ],
+          ),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -35,31 +56,35 @@ class DentalBaseDetail extends StatelessWidget {
           elevation: 4,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDetailItem('Paciente', dentalBase.patientName),
-                const Divider(),
-                _buildDetailItem('Tipo de Base', dentalBase.baseType),
-                const Divider(),
-                _buildDetailItem('Estado', dentalBase.status),
-                const Divider(),
-                _buildDetailItem(
-                  'Fecha de Creación',
-                  DateFormat('dd/MM/yyyy').format(dentalBase.creationDate),
-                ),
-                const Divider(),
-                _buildDetailItem(
-                  'Fecha de Entrega',
-                  dentalBase.deliveryDate != null
-                      ? DateFormat('dd/MM/yyyy').format(dentalBase.deliveryDate!)
-                      : 'No establecida',
-                ),
-                if (dentalBase.notes != null && dentalBase.notes!.isNotEmpty) ...[
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailItem('OA (ID)', dentalBase.oa.toString()),
                   const Divider(),
-                  _buildDetailItem('Notas', dentalBase.notes!),
+                  _buildDetailItem('Doctor', dentalBase.doctorName),
+                  const Divider(),
+                  _buildDetailItem('Paciente', dentalBase.patientName),
+                  const Divider(),
+                  _buildDetailItem('RUT Paciente', dentalBase.patientRUT),
+                  const Divider(),
+                  _buildDetailItem('Acción', dentalBase.action),
+                  const Divider(),
+                  _buildDetailItem(
+                    'Fecha de Entrada',
+                    DateFormat('dd/MM/yyyy').format(dentalBase.entryDate),
+                  ),
+                  const Divider(),
+                  _buildDetailItem(
+                    'Fecha de Salida',
+                    DateFormat('dd/MM/yyyy').format(dentalBase.exitDate),
+                  ),
+                  const Divider(),
+                  _buildDetailItem('Precio', '\$${dentalBase.price}'),
+                  const Divider(),
+                  _buildDetailItem('Observaciones', dentalBase.observations),
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -82,12 +107,7 @@ class DentalBaseDetail extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 18)),
         ],
       ),
     );

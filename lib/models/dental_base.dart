@@ -1,66 +1,78 @@
 class DentalBase {
-  final int? id;
+  final int oa;
+  final String doctorName;
   final String patientName;
-  final String baseType;
-  final DateTime creationDate;
-  final DateTime? deliveryDate;
-  final String status;
-  final String? notes;
+  final String patientRUT;
+  final String action;
+  final String observations;
+  final DateTime entryDate;
+  final DateTime exitDate;
+  final int price;
 
   DentalBase({
-    this.id,
+    required this.oa,
+    required this.doctorName,
     required this.patientName,
-    required this.baseType,
-    required this.creationDate,
-    this.deliveryDate,
-    required this.status,
-    this.notes,
+    required this.patientRUT,
+    required this.action,
+    required this.observations,
+    required this.entryDate,
+    required this.exitDate,
+    required this.price,
   });
 
   // Convertir un objeto DentalBase a un Map
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      'oa': oa,
+      'doctorName': doctorName,
       'patientName': patientName,
-      'baseType': baseType,
-      'creationDate': creationDate.toIso8601String(),
-      'deliveryDate': deliveryDate?.toIso8601String(),
-      'status': status,
-      'notes': notes,
+      'patientRUT': patientRUT,
+      'action': action,
+      'observations': observations,
+      'entryDate': entryDate.toIso8601String(),
+      'exitDate': exitDate.toIso8601String(),
+      'price': price,
     };
   }
 
   // Crear un objeto DentalBase desde un Map
   factory DentalBase.fromMap(Map<String, dynamic> map) {
     return DentalBase(
-      id: map['id'],
+      oa: map['oa'],
+      doctorName: map['doctorName'],
       patientName: map['patientName'],
-      baseType: map['baseType'],
-      creationDate: DateTime.parse(map['creationDate']),
-      deliveryDate: map['deliveryDate'] != null ? DateTime.parse(map['deliveryDate']) : null,
-      status: map['status'],
-      notes: map['notes'],
+      patientRUT: map['patientRUT'],
+      action: map['action'],
+      observations: map['observations'],
+      entryDate: DateTime.parse(map['entryDate']),
+      exitDate: DateTime.parse(map['exitDate']),
+      price: map['price'],
     );
   }
 
   // Crear una copia del objeto con algunos campos modificados
   DentalBase copyWith({
-    int? id,
+    int? oa,
+    String? doctorName,
     String? patientName,
-    String? baseType,
-    DateTime? creationDate,
-    DateTime? deliveryDate,
-    String? status,
-    String? notes,
+    String? patientRUT,
+    String? action,
+    String? observations,
+    DateTime? entryDate,
+    DateTime? exitDate,
+    int? price,
   }) {
     return DentalBase(
-      id: id ?? this.id,
+      oa: oa ?? this.oa,
+      doctorName: doctorName ?? this.doctorName,
       patientName: patientName ?? this.patientName,
-      baseType: baseType ?? this.baseType,
-      creationDate: creationDate ?? this.creationDate,
-      deliveryDate: deliveryDate ?? this.deliveryDate,
-      status: status ?? this.status,
-      notes: notes ?? this.notes,
+      patientRUT: patientRUT ?? this.patientRUT,
+      action: action ?? this.action,
+      observations: observations ?? this.observations,
+      entryDate: entryDate ?? this.entryDate,
+      exitDate: exitDate ?? this.exitDate,
+      price: price ?? this.price,
     );
   }
 }

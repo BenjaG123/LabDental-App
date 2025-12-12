@@ -14,7 +14,6 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -23,7 +22,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Bases Lab',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 255, 255, 255),
+        ),
         useMaterial3: true,
       ),
       home: const HomeScreen(),
