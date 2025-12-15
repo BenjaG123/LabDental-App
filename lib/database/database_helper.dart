@@ -242,13 +242,10 @@ class DatabaseHelper {
 
     if (oaList.isEmpty) return [];
 
-    // Construir query con paginación
+    // Construir query con paginación (SIN estado JOIN)
     var query = _supabase
         .from('dental_bases')
-        .select('''
-          *,
-          estado:estados(*)
-        ''')
+        .select()
         .eq('laboratory_id', labId)
         .inFilter('oa', oaList)
         .order('oa', ascending: false);
