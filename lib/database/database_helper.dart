@@ -1,316 +1,353 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/dental_base.dart';
 import '../models/sheet.dart';
+import '../services/laboratory_service.dart';
 
+/// DatabaseHelper migrado a Supabase
+/// Mantiene la misma interfaz pero usa la nube en lugar de SQLite local
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final LaboratoryService _laboratoryService = LaboratoryService();
 
   DatabaseHelper._init();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('dental_bases.db');
-    return _database!;
+  /// Obtener laboratory_id del usuario actual
+  Future<String?> get _currentLaboratoryId async {
+    final profile = await _laboratoryService.getCurrentUserProfile();
+    return profile?['laboratory_id'];
   }
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+  // ==================== DENTAL BASES ====================
 
-    return await openDatabase(
-      path,
-      version: 5,
-      onCreate: _createDB,
-      onUpgrade: _onUpgrade,
-    );
-  }
-
-  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 3) {
-      await db.execute('DROP TABLE IF EXISTS dental_bases');
-      await _createDB(db, newVersion);
-    }
-    if (oldVersion < 4) {
-      // Crear las nuevas tablas sheets y dental_base_sheets
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sheets(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          month INTEGER NOT NULL,
-          year INTEGER NOT NULL,
-          creationDate TEXT NOT NULL,
-          UNIQUE(month, year)
-        )
-      ''');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS dental_base_sheets(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          dentalBaseOA INTEGER NOT NULL,
-          sheetId INTEGER NOT NULL,
-          FOREIGN KEY (dentalBaseOA) REFERENCES dental_bases (oa) ON DELETE CASCADE,
-          FOREIGN KEY (sheetId) REFERENCES sheets (id) ON DELETE CASCADE,
-          UNIQUE(dentalBaseOA)
-        )
-      ''');
-
-      // Agregar estadoId solo si viene de versión < 4
-      await db.execute(
-        'ALTER TABLE dental_bases ADD COLUMN estadoId INTEGER NOT NULL DEFAULT 1',
-      );
-    }
-  }
-
-  Future _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE dental_bases(
-        oa INTEGER PRIMARY KEY,
-        doctorName TEXT NOT NULL,
-        patientName TEXT NOT NULL,
-        patientRUT TEXT NOT NULL,
-        action TEXT NOT NULL,
-        observations TEXT NOT NULL,
-        entryDate TEXT NOT NULL,
-        exitDate TEXT NOT NULL,
-        price INTEGER NOT NULL,
-        estadoId INTEGER NOT NULL DEFAULT 1
-      )
-    ''');
-
-    // Crear tablas para sheets si estamos en versión 3
-    if (version >= 4) {
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS sheets(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          month INTEGER NOT NULL,
-          year INTEGER NOT NULL,
-          creationDate TEXT NOT NULL,
-          UNIQUE(month, year)
-        )
-      ''');
-
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS dental_base_sheets(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          dentalBaseOA INTEGER NOT NULL,
-          sheetId INTEGER NOT NULL,
-          FOREIGN KEY (dentalBaseOA) REFERENCES dental_bases (oa) ON DELETE CASCADE,
-          FOREIGN KEY (sheetId) REFERENCES sheets (id) ON DELETE CASCADE,
-          UNIQUE(dentalBaseOA)
-        )
-      ''');
-    }
-  }
-
-  // ==================== DENTAL BASES CRUD ====================
-
-  // Create
+  /// Insertar una nueva base dental
   Future<int> insertDentalBase(DentalBase dentalBase) async {
-    final db = await instance.database;
-    return await db.insert('dental_bases', dentalBase.toMap());
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
+
+    await _supabase.from('dental_bases').insert({
+      'oa': dentalBase.oa,
+      'laboratory_id': labId,
+      'doctor_name': dentalBase.doctorName,
+      'patient_name': dentalBase.patientName,
+      'patient_rut': dentalBase.patientRUT,
+      'action': dentalBase.action,
+      'observations': dentalBase.observations,
+      'entry_date': dentalBase.entryDate.toIso8601String(),
+      'exit_date': dentalBase.exitDate.toIso8601String(),
+      'price': dentalBase.price,
+      'estado_id': dentalBase.estado.id,
+    });
+
+    return dentalBase.oa;
   }
 
-  // Read
+  /// Obtener todas las bases dentales del laboratorio actual
   Future<List<DentalBase>> getAllDentalBases() async {
-    final db = await instance.database;
-    final result = await db.query('dental_bases');
-    return result.map((map) => DentalBase.fromMap(map)).toList();
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return [];
+
+    final response = await _supabase
+        .from('dental_bases')
+        .select()
+        .eq('laboratory_id', labId)
+        .order('oa', ascending: false);
+
+    return (response as List).map((map) => DentalBase.fromMap(map)).toList();
   }
 
+  /// Obtener una base dental por OA
   Future<DentalBase?> getDentalBase(int oa) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'dental_bases',
-      where: 'oa = ?',
-      whereArgs: [oa],
-    );
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return null;
 
-    if (maps.isNotEmpty) {
-      return DentalBase.fromMap(maps.first);
-    }
-    return null;
+    final response = await _supabase
+        .from('dental_bases')
+        .select()
+        .eq('oa', oa)
+        .eq('laboratory_id', labId)
+        .maybeSingle();
+
+    if (response == null) return null;
+    return DentalBase.fromMap(response);
   }
 
-  // Update
+  /// Actualizar una base dental
   Future<int> updateDentalBase(DentalBase dentalBase) async {
-    final db = await instance.database;
-    return await db.update(
-      'dental_bases',
-      dentalBase.toMap(),
-      where: 'oa = ?',
-      whereArgs: [dentalBase.oa],
-    );
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
+
+    await _supabase
+        .from('dental_bases')
+        .update({
+          'doctor_name': dentalBase.doctorName,
+          'patient_name': dentalBase.patientName,
+          'patient_rut': dentalBase.patientRUT,
+          'action': dentalBase.action,
+          'observations': dentalBase.observations,
+          'entry_date': dentalBase.entryDate.toIso8601String(),
+          'exit_date': dentalBase.exitDate.toIso8601String(),
+          'price': dentalBase.price,
+          'estado_id': dentalBase.estado.id,
+        })
+        .eq('oa', dentalBase.oa)
+        .eq('laboratory_id', labId);
+
+    return dentalBase.oa;
   }
 
-  // Delete
+  /// Eliminar una base dental
   Future<int> deleteDentalBase(int oa) async {
-    final db = await instance.database;
-    return await db.delete('dental_bases', where: 'oa = ?', whereArgs: [oa]);
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
+
+    await _supabase
+        .from('dental_bases')
+        .delete()
+        .eq('oa', oa)
+        .eq('laboratory_id', labId);
+
+    return oa;
   }
 
-  // ==================== SHEETS CRUD ====================
+  // ==================== SHEETS ====================
 
-  // Create
+  /// Insertar una nueva hoja
   Future<int> insertSheet(Sheet sheet) async {
-    final db = await instance.database;
-    return await db.insert('sheets', sheet.toMap());
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
+
+    final response = await _supabase
+        .from('sheets')
+        .insert({
+          'laboratory_id': labId,
+          'month': sheet.month,
+          'year': sheet.year,
+          'creation_date': sheet.creationDate.toIso8601String(),
+        })
+        .select()
+        .single();
+
+    return response['id'].hashCode; // Convertir UUID a int para compatibilidad
   }
 
-  // Read
+  /// Obtener una hoja por ID
   Future<Sheet?> getSheet(int id) async {
-    final db = await instance.database;
-    final maps = await db.query('sheets', where: 'id = ?', whereArgs: [id]);
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return null;
 
-    if (maps.isNotEmpty) {
-      return Sheet.fromMap(maps.first);
-    }
-    return null;
+    final response = await _supabase
+        .from('sheets')
+        .select()
+        .eq('laboratory_id', labId)
+        .maybeSingle();
+
+    if (response == null) return null;
+    return Sheet.fromMap(response);
   }
 
+  /// Obtener hoja por mes y año
   Future<Sheet?> getSheetByMonthYear(int month, int year) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'sheets',
-      where: 'month = ? AND year = ?',
-      whereArgs: [month, year],
-    );
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return null;
 
-    if (maps.isNotEmpty) {
-      return Sheet.fromMap(maps.first);
-    }
-    return null;
+    final response = await _supabase
+        .from('sheets')
+        .select()
+        .eq('laboratory_id', labId)
+        .eq('month', month)
+        .eq('year', year)
+        .maybeSingle();
+
+    if (response == null) return null;
+    return Sheet.fromMap(response);
   }
 
+  /// Obtener todas las hojas del laboratorio
   Future<List<Sheet>> getAllSheets() async {
-    final db = await instance.database;
-    final result = await db.query('sheets', orderBy: 'year DESC, month DESC');
-    return result.map((map) => Sheet.fromMap(map)).toList();
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return [];
+
+    final response = await _supabase
+        .from('sheets')
+        .select()
+        .eq('laboratory_id', labId)
+        .order('year', ascending: false)
+        .order('month', ascending: false);
+
+    return (response as List).map((map) => Sheet.fromMap(map)).toList();
   }
 
-  // Delete
+  /// Eliminar una hoja
   Future<int> deleteSheet(int id) async {
-    final db = await instance.database;
-    return await db.delete('sheets', where: 'id = ?', whereArgs: [id]);
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
+
+    await _supabase.from('sheets').delete().eq('laboratory_id', labId);
+
+    return id;
   }
 
-  // ==================== RELACIONES ====================
+  // ==================== RELACIÓN BASES-HOJAS ====================
 
-  // Vincular base dental a hoja
+  /// Vincular una base dental a una hoja
   Future<void> linkDentalBaseToSheet(int dentalBaseOA, int sheetId) async {
-    final db = await instance.database;
+    final labId = await _currentLaboratoryId;
+    if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
 
-    // Primero eliminar cualquier vinculación anterior
-    await db.delete(
-      'dental_base_sheets',
-      where: 'dentalBaseOA = ?',
-      whereArgs: [dentalBaseOA],
-    );
+    // Obtener el UUID real del sheet
+    final sheetResponse = await _supabase
+        .from('sheets')
+        .select('id')
+        .eq('laboratory_id', labId)
+        .single();
 
-    // Insertar nueva vinculación
-    await db.insert('dental_base_sheets', {
-      'dentalBaseOA': dentalBaseOA,
-      'sheetId': sheetId,
+    final sheetUuid = sheetResponse['id'];
+
+    await _supabase.from('dental_base_sheets').insert({
+      'dental_base_oa': dentalBaseOA,
+      'dental_base_lab_id': labId,
+      'sheet_id': sheetUuid,
     });
   }
 
-  // Obtener todas las bases dentales de una hoja
-  Future<List<DentalBase>> getDentalBasesBySheet(int sheetId) async {
-    final db = await instance.database;
-    final result = await db.rawQuery(
-      '''
-      SELECT db.* FROM dental_bases db
-      INNER JOIN dental_base_sheets dbs ON db.oa = dbs.dentalBaseOA
-      WHERE dbs.sheetId = ?
-      ORDER BY db.exitDate DESC
-    ''',
-      [sheetId],
-    );
+  /// Obtener bases dentales de una hoja con paginación y filtros
+  Future<List<DentalBase>> getDentalBasesBySheet(
+    int sheetId, {
+    int? limit,
+    int? offset,
+    bool onlyPending = false,
+  }) async {
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return [];
 
-    return result.map((map) => DentalBase.fromMap(map)).toList();
-  }
+    // Primero obtener el UUID del sheet
+    final sheetResponse = await _supabase
+        .from('sheets')
+        .select('id')
+        .eq('laboratory_id', labId)
+        .single();
 
-  // Obtener la hoja de una base dental
-  Future<Sheet?> getSheetForDentalBase(int dentalBaseOA) async {
-    final db = await instance.database;
-    final result = await db.rawQuery(
-      '''
-      SELECT s.* FROM sheets s
-      INNER JOIN dental_base_sheets dbs ON s.id = dbs.sheetId
-      WHERE dbs.dentalBaseOA = ?
-    ''',
-      [dentalBaseOA],
-    );
+    final sheetUuid = sheetResponse['id'];
 
-    if (result.isNotEmpty) {
-      return Sheet.fromMap(result.first);
+    // Obtener las bases vinculadas
+    final linksResponse = await _supabase
+        .from('dental_base_sheets')
+        .select('dental_base_oa')
+        .eq('sheet_id', sheetUuid);
+
+    final oaList = (linksResponse as List)
+        .map((link) => link['dental_base_oa'])
+        .toList();
+
+    if (oaList.isEmpty) return [];
+
+    // Construir query con paginación
+    var query = _supabase
+        .from('dental_bases')
+        .select('''
+          *,
+          estado:estados(*)
+        ''')
+        .eq('laboratory_id', labId)
+        .inFilter('oa', oaList)
+        .order('oa', ascending: false);
+
+    // Aplicar paginación si se especifica
+    if (limit != null) {
+      query = query.limit(limit);
+      if (offset != null) {
+        query = query.range(offset, offset + limit - 1);
+      }
     }
-    return null;
+
+    final basesResponse = await query;
+
+    List<DentalBase> bases = (basesResponse as List)
+        .map((map) => DentalBase.fromMap(map))
+        .toList();
+
+    // Filtrar solo pendientes si se solicita (estado.id != 5)
+    if (onlyPending) {
+      bases = bases.where((base) => base.estado.id != 5).toList();
+    }
+
+    return bases;
   }
 
-  // ==================== LÓGICA DE AUTO-CREACIÓN ====================
+  /// Obtener hoja de una base dental
+  Future<Sheet?> getSheetForDentalBase(int dentalBaseOA) async {
+    final labId = await _currentLaboratoryId;
+    if (labId == null) return null;
 
-  // Obtener o crear hoja para una fecha (usando exitDate)
+    final linkResponse = await _supabase
+        .from('dental_base_sheets')
+        .select('sheet_id')
+        .eq('dental_base_oa', dentalBaseOA)
+        .eq('dental_base_lab_id', labId)
+        .maybeSingle();
+
+    if (linkResponse == null) return null;
+
+    final sheetUuid = linkResponse['sheet_id'];
+
+    final sheetResponse = await _supabase
+        .from('sheets')
+        .select()
+        .eq('id', sheetUuid)
+        .eq('laboratory_id', labId)
+        .maybeSingle();
+
+    if (sheetResponse == null) return null;
+    return Sheet.fromMap(sheetResponse);
+  }
+
+  /// Obtener o crear hoja para una fecha
   Future<Sheet> getOrCreateSheetForDate(DateTime exitDate) async {
     final month = exitDate.month;
     final year = exitDate.year;
 
-    // Buscar si existe hoja para ese mes/año
+    // Intentar obtener hoja existente
     Sheet? existingSheet = await getSheetByMonthYear(month, year);
 
     if (existingSheet != null) {
       return existingSheet;
     }
 
-    // No existe, crear nueva hoja
-    final db = await instance.database;
-    final newSheetId = await db.insert('sheets', {
-      'month': month,
-      'year': year,
-      'creationDate': DateTime.now().toIso8601String(),
-    });
-
-    // Retornar la hoja recién creada
-    return Sheet(
-      id: newSheetId,
+    // Crear nueva hoja
+    final newSheet = Sheet(
+      id: 0, // Se generará en Supabase
       month: month,
       year: year,
       creationDate: DateTime.now(),
     );
+
+    final id = await insertSheet(newSheet);
+    return newSheet.copyWith(id: id);
   }
 
-  // Contar bases en una hoja
+  /// Contar bases en una hoja
   Future<int> countBasesInSheet(int sheetId) async {
-    final db = await instance.database;
-    final result = await db.rawQuery(
-      '''
-      SELECT COUNT(*) as count FROM dental_base_sheets
-      WHERE sheetId = ?
-    ''',
-      [sheetId],
-    );
-
-    return Sqflite.firstIntValue(result) ?? 0;
+    final bases = await getDentalBasesBySheet(sheetId);
+    return bases.length;
   }
 
-  // Obtener suma total de precios en una hoja
+  /// Obtener precio total de una hoja (solo bases en Terminación)
   Future<int> getTotalPriceInSheet(int sheetId) async {
-    final db = await instance.database;
-    final result = await db.rawQuery(
-      '''
-      SELECT SUM(db.price) as total FROM dental_bases db
-      INNER JOIN dental_base_sheets dbs ON db.oa = dbs.dentalBaseOA
-      WHERE dbs.sheetId = ? AND db.estadoId = 5
-    ''',
-      [sheetId],
-    );
-
-    return Sqflite.firstIntValue(result) ?? 0;
+    final bases = await getDentalBasesBySheet(sheetId);
+    int total = 0;
+    for (var base in bases) {
+      // Solo sumar si está en estado "Terminación" (id = 5)
+      if (base.estado.id == 5) {
+        total += base.price;
+      }
+    }
+    return total;
   }
 
-  // Close database
-  Future close() async {
-    final db = await instance.database;
-    db.close();
+  /// Cerrar conexión (no necesario en Supabase, pero mantenemos compatibilidad)
+  Future<void> close() async {
+    // No se necesita cerrar conexión con Supabase
+    return;
   }
 }

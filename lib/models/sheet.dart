@@ -22,10 +22,20 @@ class Sheet {
 
   factory Sheet.fromMap(Map<String, dynamic> map) {
     return Sheet(
-      id: map['id'],
+      // Supabase devuelve UUID como string, convertir a hashCode para compatibilidad
+      id: map['id'] is String ? map['id'].hashCode : map['id'],
       month: map['month'],
       year: map['year'],
-      creationDate: DateTime.parse(map['creationDate']),
+      creationDate: DateTime.parse(map['creation_date'] ?? map['creationDate']),
+    );
+  }
+
+  Sheet copyWith({int? id, int? month, int? year, DateTime? creationDate}) {
+    return Sheet(
+      id: id ?? this.id,
+      month: month ?? this.month,
+      year: year ?? this.year,
+      creationDate: creationDate ?? this.creationDate,
     );
   }
 

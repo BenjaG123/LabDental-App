@@ -43,15 +43,16 @@ class DentalBase {
   factory DentalBase.fromMap(Map<String, dynamic> map) {
     return DentalBase(
       oa: map['oa'],
-      doctorName: map['doctorName'],
-      patientName: map['patientName'],
-      patientRUT: map['patientRUT'],
+      // Soportar tanto snake_case (Supabase) como camelCase (local)
+      doctorName: map['doctor_name'] ?? map['doctorName'],
+      patientName: map['patient_name'] ?? map['patientName'],
+      patientRUT: map['patient_rut'] ?? map['patientRUT'],
       action: map['action'],
       observations: map['observations'],
-      entryDate: DateTime.parse(map['entryDate']),
-      exitDate: DateTime.parse(map['exitDate']),
+      entryDate: DateTime.parse(map['entry_date'] ?? map['entryDate']),
+      exitDate: DateTime.parse(map['exit_date'] ?? map['exitDate']),
       price: map['price'],
-      estado: BaseState.getById(map['estadoId'] ?? 1),
+      estado: BaseState.getById(map['estado_id'] ?? map['estadoId'] ?? 1),
     );
   }
 

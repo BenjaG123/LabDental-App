@@ -78,15 +78,17 @@ class _DentalBaseFormState extends State<DentalBaseForm> {
         );
 
         if (widget.dentalBase == null) {
+          // Crear nueva base
           await DatabaseHelper.instance.insertDentalBase(dentalBase);
+          // Solo vincular cuando es nueva
+          await DatabaseHelper.instance.linkDentalBaseToSheet(
+            dentalBase.oa,
+            sheet.id,
+          );
         } else {
+          // Solo actualizar, NO vincular de nuevo
           await DatabaseHelper.instance.updateDentalBase(dentalBase);
         }
-
-        await DatabaseHelper.instance.linkDentalBaseToSheet(
-          dentalBase.oa,
-          sheet.id,
-        );
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

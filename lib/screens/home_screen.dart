@@ -4,9 +4,11 @@ import '../models/dental_base.dart';
 import '../models/base_state.dart';
 import '../models/sheet.dart';
 import '../database/database_helper.dart';
+import '../services/laboratory_service.dart';
 import 'dental_base_form.dart';
 import 'dental_base_detail.dart';
 import 'sheets_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final _laboratoryService = LaboratoryService();
   List<Sheet> _todasLasHojas = [];
   Sheet? _hojaActual;
   List<DentalBase> _basesDeHojaActual = [];
@@ -23,12 +26,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _totalPrecio = 0;
   bool _isLoading = true;
 
+  // Datos del laboratorio
+  String _laboratoryName = 'Cargando...';
+  String _userInitial = 'U';
+
   // Filtros y búsqueda
   bool _isSearching = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _filtroDoctor;
   int? _filtroEstadoId;
+  bool _showOnlyPending = true; // Por defecto mostrar solo pendientes
 
   @override
   void initState() {
@@ -39,40 +47,69 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _cargarDatos() async {
     setState(() => _isLoading = true);
 
-    final hojas = await DatabaseHelper.instance.getAllSheets();
+    try {
+      // Ejecutar consultas en paralelo para mejorar rendimiento
+      final results = await Future.wait([
+        _laboratoryService.getCurrentUserLaboratory(),
+        _laboratoryService.getCurrentUserProfile(),
+        DatabaseHelper.instance.getAllSheets(),
+      ]);
 
-    Sheet? hojaSeleccionada;
-    if (hojas.isNotEmpty) {
-      hojaSeleccionada = hojas.first;
-    } else {
-      final ahora = DateTime.now();
-      final nuevaHoja = await DatabaseHelper.instance.getOrCreateSheetForDate(
-        ahora,
-      );
-      hojas.add(nuevaHoja);
-      hojaSeleccionada = nuevaHoja;
+      final lab = results[0] as Map<String, dynamic>?;
+      final profile = results[1] as Map<String, dynamic>?;
+      final hojas = results[2] as List<Sheet>;
+
+      Sheet? hojaSeleccionada;
+      if (hojas.isNotEmpty) {
+        hojaSeleccionada = hojas.first;
+      } else {
+        final ahora = DateTime.now();
+        final nuevaHoja = await DatabaseHelper.instance.getOrCreateSheetForDate(
+          ahora,
+        );
+        hojas.add(nuevaHoja);
+        hojaSeleccionada = nuevaHoja;
+      }
+
+      // Cargar datos de la hoja seleccionada en paralelo
+      List<DentalBase> bases = [];
+      int total = 0;
+      if (hojaSeleccionada != null) {
+        final sheetResults = await Future.wait([
+          DatabaseHelper.instance.getDentalBasesBySheet(
+            hojaSeleccionada.id,
+            onlyPending: _showOnlyPending,
+          ),
+          DatabaseHelper.instance.getTotalPriceInSheet(hojaSeleccionada.id),
+        ]);
+        bases = sheetResults[0] as List<DentalBase>;
+        total = sheetResults[1] as int;
+      }
+
+      if (mounted) {
+        setState(() {
+          _laboratoryName = lab?['name'] ?? 'Mi Laboratorio';
+          _userInitial = (profile?['full_name'] ?? 'U')[0].toUpperCase();
+          _todasLasHojas = hojas;
+          _hojaActual = hojaSeleccionada;
+          _basesDeHojaActual = bases;
+          _totalPrecio = total;
+          _isLoading = false;
+        });
+
+        _aplicarFiltros();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
-
-    List<DentalBase> bases = [];
-    int total = 0;
-    if (hojaSeleccionada != null) {
-      bases = await DatabaseHelper.instance.getDentalBasesBySheet(
-        hojaSeleccionada.id,
-      );
-      total = await DatabaseHelper.instance.getTotalPriceInSheet(
-        hojaSeleccionada.id,
-      );
-    }
-
-    setState(() {
-      _todasLasHojas = hojas;
-      _hojaActual = hojaSeleccionada;
-      _basesDeHojaActual = bases;
-      _totalPrecio = total;
-      _isLoading = false;
-    });
-
-    _aplicarFiltros();
   }
 
   void _aplicarFiltros() {
@@ -139,25 +176,24 @@ class _HomeScreenState extends State<HomeScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // HEADER CON TÍTULO Y BOTÓN DE GESTIÓN
-                  Padding(
+                  // HEADER PROFESIONAL
+                  Container(
                     padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Bases Dentales',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4DB6AC),
-                          ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.folder_open),
-                          color: const Color(0xFF4DB6AC),
-                          iconSize: 28,
-                          onPressed: () async {
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        // Ícono de carpeta
+                        GestureDetector(
+                          onTap: () async {
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -166,10 +202,75 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                             _cargarDatos();
                           },
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4DB6AC).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.folder_open,
+                              color: Color(0xFF4DB6AC),
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+
+                        // Columna con nombre del lab y título
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Bases Dentales',
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4DB6AC),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _laboratoryName,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Avatar del usuario
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const ProfileScreen(),
+                              ),
+                            );
+                          },
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor: const Color(0xFF4DB6AC),
+                            child: Text(
+                              _userInitial,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 16),
 
                   // CARD GRANDE: SELECTOR DE HOJA
                   Padding(
@@ -197,12 +298,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              _hojaActual?.getSheetName() ?? 'Sin hoja',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                            Expanded(
+                              child: Text(
+                                _hojaActual?.getSheetName() ?? 'Sin hoja',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                             const Icon(
@@ -234,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Bases Totales',
+                                  'Bases Terminadas',
                                   style: TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
@@ -242,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${_basesDeHojaActual.length}',
+                                  '${_basesDeHojaActual.where((base) => base.estado.id == 5).length}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 24,
@@ -344,13 +447,37 @@ class _HomeScreenState extends State<HomeScreen> {
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Bases del Mes',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
+                              Row(
+                                children: [
+                                  const Text(
+                                    'Bases del Mes',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Chip de filtro pendientes
+                                  FilterChip(
+                                    label: Text(
+                                      _showOnlyPending ? 'Pendientes' : 'Todas',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    selected: _showOnlyPending,
+                                    onSelected: (bool value) {
+                                      setState(() {
+                                        _showOnlyPending = value;
+                                      });
+                                      _cargarDatos();
+                                    },
+                                    selectedColor: const Color(
+                                      0xFF4DB6AC,
+                                    ).withOpacity(0.2),
+                                    checkmarkColor: const Color(0xFF4DB6AC),
+                                    backgroundColor: Colors.grey[200],
+                                  ),
+                                ],
                               ),
                               Row(
                                 children: [
