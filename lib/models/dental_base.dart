@@ -1,3 +1,5 @@
+import 'base_state.dart';
+
 class DentalBase {
   final int oa;
   final String doctorName;
@@ -8,6 +10,7 @@ class DentalBase {
   final DateTime entryDate;
   final DateTime exitDate;
   final int price;
+  final BaseState estado;
 
   DentalBase({
     required this.oa,
@@ -19,9 +22,9 @@ class DentalBase {
     required this.entryDate,
     required this.exitDate,
     required this.price,
+    required this.estado,
   });
 
-  // Convertir un objeto DentalBase a un Map
   Map<String, dynamic> toMap() {
     return {
       'oa': oa,
@@ -33,10 +36,10 @@ class DentalBase {
       'entryDate': entryDate.toIso8601String(),
       'exitDate': exitDate.toIso8601String(),
       'price': price,
+      'estadoId': estado.id,
     };
   }
 
-  // Crear un objeto DentalBase desde un Map
   factory DentalBase.fromMap(Map<String, dynamic> map) {
     return DentalBase(
       oa: map['oa'],
@@ -48,10 +51,10 @@ class DentalBase {
       entryDate: DateTime.parse(map['entryDate']),
       exitDate: DateTime.parse(map['exitDate']),
       price: map['price'],
+      estado: BaseState.getById(map['estadoId'] ?? 1),
     );
   }
 
-  // Crear una copia del objeto con algunos campos modificados
   DentalBase copyWith({
     int? oa,
     String? doctorName,
@@ -62,6 +65,7 @@ class DentalBase {
     DateTime? entryDate,
     DateTime? exitDate,
     int? price,
+    BaseState? estado,
   }) {
     return DentalBase(
       oa: oa ?? this.oa,
@@ -73,6 +77,7 @@ class DentalBase {
       entryDate: entryDate ?? this.entryDate,
       exitDate: exitDate ?? this.exitDate,
       price: price ?? this.price,
+      estado: estado ?? this.estado,
     );
   }
 }
