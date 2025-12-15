@@ -2,7 +2,7 @@ name: iOS Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch: # Permite ejecutar manualmente
 
 jobs:
