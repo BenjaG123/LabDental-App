@@ -1,5 +1,5 @@
 class Sheet {
-  final int id;
+  final String id; // Changed from int to String to store UUID
   final int month;
   final int year;
   final DateTime creationDate;
@@ -22,15 +22,15 @@ class Sheet {
 
   factory Sheet.fromMap(Map<String, dynamic> map) {
     return Sheet(
-      // Supabase devuelve UUID como string, convertir a hashCode para compatibilidad
-      id: map['id'] is String ? map['id'].hashCode : map['id'],
+      // Supabase devuelve UUID como string
+      id: map['id'].toString(),
       month: map['month'],
       year: map['year'],
       creationDate: DateTime.parse(map['creation_date'] ?? map['creationDate']),
     );
   }
 
-  Sheet copyWith({int? id, int? month, int? year, DateTime? creationDate}) {
+  Sheet copyWith({String? id, int? month, int? year, DateTime? creationDate}) {
     return Sheet(
       id: id ?? this.id,
       month: month ?? this.month,

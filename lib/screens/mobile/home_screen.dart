@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/dental_base.dart';
-import '../models/base_state.dart';
-import '../models/sheet.dart';
-import '../database/database_helper.dart';
-import '../services/laboratory_service.dart';
+import '../../models/dental_base.dart';
+import '../../models/base_state.dart';
+import '../../models/sheet.dart';
+import '../../database/database_helper.dart';
+import '../../services/laboratory_service.dart';
 import 'dental_base_form.dart';
 import 'dental_base_detail.dart';
 import 'sheets_screen.dart';
@@ -60,7 +60,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final hojas = results[2] as List<Sheet>;
 
       Sheet? hojaSeleccionada;
-      if (hojas.isNotEmpty) {
+      // Si ya tenemos una hoja actual, intentar mantenerla
+      if (_hojaActual != null && hojas.any((h) => h.id == _hojaActual!.id)) {
+        hojaSeleccionada = hojas.firstWhere((h) => h.id == _hojaActual!.id);
+      } else if (hojas.isNotEmpty) {
         hojaSeleccionada = hojas.first;
       } else {
         final ahora = DateTime.now();
@@ -80,7 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
             hojaSeleccionada.id,
             onlyPending: _showOnlyPending,
           ),
-          DatabaseHelper.instance.getTotalPriceInSheet(hojaSeleccionada.id),
+          DatabaseHelper.instance.getTotalPriceInSheet(
+            hojaSeleccionada.id,
+            onlyPending: _showOnlyPending,
+          ),
         ]);
         bases = sheetResults[0] as List<DentalBase>;
         total = sheetResults[1] as int;
@@ -94,6 +100,49 @@ class _HomeScreenState extends State<HomeScreen> {
           _hojaActual = hojaSeleccionada;
           _basesDeHojaActual = bases;
           _totalPrecio = total;
+          _isLoading = false;
+        });
+
+        _aplicarFiltros();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar datos: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Recargar solo los datos de la hoja actual sin cambiar la selección
+  Future<void> _recargarDatosHojaActual() async {
+    if (_hojaActual == null) {
+      await _cargarDatos();
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final sheetResults = await Future.wait([
+        DatabaseHelper.instance.getDentalBasesBySheet(
+          _hojaActual!.id,
+          onlyPending: _showOnlyPending,
+        ),
+        DatabaseHelper.instance.getTotalPriceInSheet(
+          _hojaActual!.id,
+          onlyPending: _showOnlyPending,
+        ),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _basesDeHojaActual = sheetResults[0] as List<DentalBase>;
+          _totalPrecio = sheetResults[1] as int;
           _isLoading = false;
         });
 
@@ -146,9 +195,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final bases = await DatabaseHelper.instance.getDentalBasesBySheet(
       nuevaHoja.id,
+      onlyPending: _showOnlyPending,
     );
     final total = await DatabaseHelper.instance.getTotalPriceInSheet(
       nuevaHoja.id,
+      onlyPending: _showOnlyPending,
     );
 
     setState(() {
@@ -321,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 16),
 
-                  // DOS CARDS PEQUEÑAS: BASES TOTALES E INGRESOS
+                  // DOS CARDS PEQUEÑAS: BASES Y INGRESOS (DINÁMICAS)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
@@ -336,16 +387,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Bases Terminadas',
-                                  style: TextStyle(
+                                Text(
+                                  _showOnlyPending
+                                      ? 'Bases Pendientes'
+                                      : 'Bases Completadas',
+                                  style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${_basesDeHojaActual.where((base) => base.estado.id == 5).length}',
+                                  '${_basesDeHojaActual.where((base) => _showOnlyPending ? base.estado.id != 5 : base.estado.id == 5).length}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 24,
@@ -367,9 +420,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Ingresos',
-                                  style: TextStyle(
+                                Text(
+                                  _showOnlyPending
+                                      ? 'Ingresos Pendientes'
+                                      : 'Ingresos Completados',
+                                  style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
                                   ),
@@ -458,10 +513,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 12),
-                                  // Chip de filtro pendientes
+                                  // Chip de filtro pendientes/completadas
                                   FilterChip(
                                     label: Text(
-                                      _showOnlyPending ? 'Pendientes' : 'Todas',
+                                      _showOnlyPending
+                                          ? 'Pendientes'
+                                          : 'Completadas',
                                       style: const TextStyle(fontSize: 12),
                                     ),
                                     selected: _showOnlyPending,
@@ -469,7 +526,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       setState(() {
                                         _showOnlyPending = value;
                                       });
-                                      _cargarDatos();
+                                      _recargarDatosHojaActual(); // Cambiado de _cargarDatos()
                                     },
                                     selectedColor: const Color(
                                       0xFF4DB6AC,

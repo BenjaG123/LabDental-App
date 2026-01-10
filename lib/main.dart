@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'screens/home_screen.dart';
+import 'screens/mobile/home_screen.dart';
+import 'screens/desktop/desktop_home_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/desktop/desktop_login_screen.dart'; // Added import
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io' show Platform;
+import 'utils/platform_utils.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -115,11 +118,21 @@ class _AuthGateState extends State<AuthGate> {
         // Verificar si hay sesión activa
         final session = snapshot.hasData ? snapshot.data!.session : null;
 
-        // Si hay sesión → HomeScreen, si no → LoginScreen
+        // Si hay sesión → HomeScreen (adaptativo), si no → LoginScreen
         if (session != null) {
-          return const HomeScreen();
+          // Routing adaptativo: Desktop o Mobile
+          if (PlatformUtils.isDesktop) {
+            return const DesktopHomeScreen();
+          } else {
+            return const HomeScreen();
+          }
         } else {
-          return const LoginScreen();
+          // Usuario no autenticado - mostrar login según plataforma
+          if (PlatformUtils.isDesktop) {
+            return const DesktopLoginScreen();
+          } else {
+            return const LoginScreen();
+          }
         }
       },
     );

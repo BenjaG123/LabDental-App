@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/laboratory_service.dart';
-import '../home_screen.dart';
+import '../../utils/error_handler.dart';
+import '../mobile/home_screen.dart';
 
 class RegisterLaboratoryScreen extends StatefulWidget {
   const RegisterLaboratoryScreen({super.key});
@@ -148,8 +149,12 @@ class _RegisterLaboratoryScreenState extends State<RegisterLaboratoryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(ErrorHandler.parseAuthError(e)),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }

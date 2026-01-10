@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-import '../models/sheet.dart';
-import '../database/database_helper.dart';
-import '../services/export_excel_service.dart';
+import '../../models/sheet.dart';
+import '../../database/database_helper.dart';
+import '../../services/export_excel_service.dart';
 
 class SheetsScreen extends StatefulWidget {
   const SheetsScreen({super.key});
@@ -13,7 +14,8 @@ class SheetsScreen extends StatefulWidget {
 
 class _SheetsScreenState extends State<SheetsScreen> {
   List<Sheet> _sheets = [];
-  Map<int, int> _baseCounts = {};
+  Map<String, int> _baseCounts =
+      {}; // Cambiado de Map<int, int> a Map<String, int>
   bool _isLoading = true;
 
   @override
@@ -26,7 +28,7 @@ class _SheetsScreenState extends State<SheetsScreen> {
     setState(() => _isLoading = true);
 
     final sheets = await DatabaseHelper.instance.getAllSheets();
-    final counts = <int, int>{};
+    final counts = <String, int>{}; // Cambiado de <int, int> a <String, int>
 
     for (var sheet in sheets) {
       final count = await DatabaseHelper.instance.countBasesInSheet(sheet.id);

@@ -25,21 +25,35 @@ class DatabaseHelper {
     final labId = await _currentLaboratoryId;
     if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
 
-    await _supabase.from('dental_bases').insert({
-      'oa': dentalBase.oa,
-      'laboratory_id': labId,
-      'doctor_name': dentalBase.doctorName,
-      'patient_name': dentalBase.patientName,
-      'patient_rut': dentalBase.patientRUT,
-      'action': dentalBase.action,
-      'observations': dentalBase.observations,
-      'entry_date': dentalBase.entryDate.toIso8601String(),
-      'exit_date': dentalBase.exitDate.toIso8601String(),
-      'price': dentalBase.price,
-      'estado_id': dentalBase.estado.id,
-    });
+    try {
+      await _supabase.from('dental_bases').insert({
+        'oa': dentalBase.oa,
+        'laboratory_id': labId,
+        'doctor_name': dentalBase.doctorName,
+        'patient_name': dentalBase.patientName,
+        'patient_rut': dentalBase.patientRUT,
+        'action': dentalBase.action,
+        'observations': dentalBase.observations,
+        'entry_date': dentalBase.entryDate.toIso8601String(),
+        'exit_date': dentalBase.exitDate.toIso8601String(),
+        'price': dentalBase.price,
+        'estado_id': dentalBase.estado.id,
+      });
 
-    return dentalBase.oa;
+      return dentalBase.oa;
+    } catch (e) {
+      // Capturar error de clave duplicada (23505)
+      final errorMsg = e.toString();
+      if (errorMsg.contains('23505') ||
+          errorMsg.contains('duplicate key') ||
+          errorMsg.contains('dental_base_pkey')) {
+        throw Exception(
+          'La base OA #${dentalBase.oa} ya está registrada en este laboratorio',
+        );
+      }
+      // Re-lanzar otros errores
+      rethrow;
+    }
   }
 
   /// Obtener todas las bases dentales del laboratorio actual
@@ -113,7 +127,7 @@ class DatabaseHelper {
   // ==================== SHEETS ====================
 
   /// Insertar una nueva hoja
-  Future<int> insertSheet(Sheet sheet) async {
+  Future<String> insertSheet(Sheet sheet) async {
     final labId = await _currentLaboratoryId;
     if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
 
@@ -128,17 +142,18 @@ class DatabaseHelper {
         .select()
         .single();
 
-    return response['id'].hashCode; // Convertir UUID a int para compatibilidad
+    return response['id'].toString(); // Return UUID as string
   }
 
   /// Obtener una hoja por ID
-  Future<Sheet?> getSheet(int id) async {
+  Future<Sheet?> getSheet(String id) async {
     final labId = await _currentLaboratoryId;
     if (labId == null) return null;
 
     final response = await _supabase
         .from('sheets')
         .select()
+        .eq('id', id)
         .eq('laboratory_id', labId)
         .maybeSingle();
 
@@ -179,11 +194,15 @@ class DatabaseHelper {
   }
 
   /// Eliminar una hoja
-  Future<int> deleteSheet(int id) async {
+  Future<String> deleteSheet(String id) async {
     final labId = await _currentLaboratoryId;
     if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
 
-    await _supabase.from('sheets').delete().eq('laboratory_id', labId);
+    await _supabase
+        .from('sheets')
+        .delete()
+        .eq('id', id)
+        .eq('laboratory_id', labId);
 
     return id;
   }
@@ -191,29 +210,20 @@ class DatabaseHelper {
   // ==================== RELACIÓN BASES-HOJAS ====================
 
   /// Vincular una base dental a una hoja
-  Future<void> linkDentalBaseToSheet(int dentalBaseOA, int sheetId) async {
+  Future<void> linkDentalBaseToSheet(int dentalBaseOA, String sheetId) async {
     final labId = await _currentLaboratoryId;
     if (labId == null) throw Exception('Usuario no tiene laboratorio asignado');
-
-    // Obtener el UUID real del sheet
-    final sheetResponse = await _supabase
-        .from('sheets')
-        .select('id')
-        .eq('laboratory_id', labId)
-        .single();
-
-    final sheetUuid = sheetResponse['id'];
 
     await _supabase.from('dental_base_sheets').insert({
       'dental_base_oa': dentalBaseOA,
       'dental_base_lab_id': labId,
-      'sheet_id': sheetUuid,
+      'sheet_id': sheetId, // Now a proper UUID string
     });
   }
 
   /// Obtener bases dentales de una hoja con paginación y filtros
   Future<List<DentalBase>> getDentalBasesBySheet(
-    int sheetId, {
+    String sheetId, {
     int? limit,
     int? offset,
     bool onlyPending = false,
@@ -221,14 +231,8 @@ class DatabaseHelper {
     final labId = await _currentLaboratoryId;
     if (labId == null) return [];
 
-    // Primero obtener el UUID del sheet
-    final sheetResponse = await _supabase
-        .from('sheets')
-        .select('id')
-        .eq('laboratory_id', labId)
-        .single();
-
-    final sheetUuid = sheetResponse['id'];
+    // sheetId is already the UUID string
+    final sheetUuid = sheetId;
 
     // Obtener las bases vinculadas
     final linksResponse = await _supabase
@@ -264,9 +268,13 @@ class DatabaseHelper {
         .map((map) => DentalBase.fromMap(map))
         .toList();
 
-    // Filtrar solo pendientes si se solicita (estado.id != 5)
+    // Filtrar según el estado solicitado
+    // onlyPending = true: mostrar solo pendientes (estado.id != 5)
+    // onlyPending = false: mostrar solo completadas (estado.id == 5)
     if (onlyPending) {
       bases = bases.where((base) => base.estado.id != 5).toList();
+    } else {
+      bases = bases.where((base) => base.estado.id == 5).toList();
     }
 
     return bases;
@@ -313,31 +321,34 @@ class DatabaseHelper {
 
     // Crear nueva hoja
     final newSheet = Sheet(
-      id: 0, // Se generará en Supabase
+      id: '', // Will be generated by Supabase
       month: month,
       year: year,
       creationDate: DateTime.now(),
     );
 
-    final id = await insertSheet(newSheet);
+    final String id = await insertSheet(newSheet);
     return newSheet.copyWith(id: id);
   }
 
   /// Contar bases en una hoja
-  Future<int> countBasesInSheet(int sheetId) async {
+  Future<int> countBasesInSheet(String sheetId) async {
     final bases = await getDentalBasesBySheet(sheetId);
     return bases.length;
   }
 
-  /// Obtener precio total de una hoja (solo bases en Terminación)
-  Future<int> getTotalPriceInSheet(int sheetId) async {
-    final bases = await getDentalBasesBySheet(sheetId);
+  /// Obtener precio total de una hoja según el filtro activo
+  Future<int> getTotalPriceInSheet(
+    String sheetId, {
+    bool onlyPending = false,
+  }) async {
+    final bases = await getDentalBasesBySheet(
+      sheetId,
+      onlyPending: onlyPending,
+    );
     int total = 0;
     for (var base in bases) {
-      // Solo sumar si está en estado "Terminación" (id = 5)
-      if (base.estado.id == 5) {
-        total += base.price;
-      }
+      total += base.price;
     }
     return total;
   }

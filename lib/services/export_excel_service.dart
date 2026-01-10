@@ -139,7 +139,7 @@ class ExcelExportService {
           ),
         )
         .value = excel.TextCellValue(
-      'Bases Producidas:',
+      'Bases Totales:',
     );
     excelSheet
         .cell(

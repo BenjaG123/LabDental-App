@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/dental_base.dart';
-import '../database/database_helper.dart';
+import '../../models/dental_base.dart';
+import '../../database/database_helper.dart';
 import 'dental_base_form.dart';
 
 class DentalBaseDetail extends StatelessWidget {

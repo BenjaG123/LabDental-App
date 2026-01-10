@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/laboratory_service.dart';
-import '../home_screen.dart';
+import '../../utils/error_handler.dart';
+import '../mobile/home_screen.dart';
 
 class JoinLaboratoryScreen extends StatefulWidget {
   const JoinLaboratoryScreen({super.key});
@@ -70,8 +71,12 @@ class _JoinLaboratoryScreenState extends State<JoinLaboratoryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(ErrorHandler.parseLaboratoryError(e)),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }

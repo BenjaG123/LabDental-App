@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/auth_service.dart';
-import '../home_screen.dart';
+import '../../utils/error_handler.dart';
+import '../mobile/home_screen.dart';
 import 'register_laboratory_screen.dart';
 import 'join_laboratory_screen.dart';
 
@@ -46,8 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(ErrorHandler.parseAuthError(e)),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import '../models/dental_base.dart';
-import '../database/database_helper.dart';
+import '../../models/dental_base.dart';
+import '../../database/database_helper.dart';
+import '../../utils/error_handler.dart';
 import 'package:intl/intl.dart';
-import '../models/base_state.dart';
-import '../utils/rut_formatter.dart';
+import '../../models/base_state.dart';
+import '../../utils/rut_formatter.dart';
+import '../../utils/string_utils.dart';
 
 class DentalBaseForm extends StatefulWidget {
   final DentalBase? dentalBase;
@@ -61,8 +63,8 @@ class _DentalBaseFormState extends State<DentalBaseForm> {
     if (_formKey.currentState!.validate()) {
       final dentalBase = DentalBase(
         oa: int.parse(_oaController.text),
-        doctorName: _doctorNameController.text,
-        patientName: _patientNameController.text,
+        doctorName: capitalizeWords(_doctorNameController.text.trim()),
+        patientName: capitalizeWords(_patientNameController.text.trim()),
         patientRUT: _patientRutController.text,
         action: _actionController.text,
         observations: _observationsController.text,
@@ -105,11 +107,22 @@ class _DentalBaseFormState extends State<DentalBaseForm> {
         }
       } catch (e) {
         if (mounted) {
+          // Parsear el mensaje de error
+          String errorMessage = e.toString();
+
+          // Detectar error de base duplicada
+          if (errorMessage.contains('ya está registrada')) {
+            errorMessage = errorMessage.replaceAll('Exception: ', '');
+          } else {
+            errorMessage = ErrorHandler.parseDatabaseError(e);
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error al guardar: $e'),
+              content: Text(errorMessage),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
